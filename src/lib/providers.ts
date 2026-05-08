@@ -1,11 +1,11 @@
 import { streamCompletion } from './promptLibrary'
 import type { ModelEndpoint, RunOptions } from './promptLibrary'
 import type { Domain } from '../types'
-import { EVAL_PROMPT_SCHEMA, type EvalPromptPayload } from './forgeSchemas'
+import type { EvalPromptPayload } from './forgeSchemas'
 
 // ─── Provider types ───────────────────────────────────────────────────────────
 
-export type ProviderKind = 'ollama' | 'openai-compatible' | 'openai-api'
+export type ProviderKind = 'ollama' | 'openai-compatible' | 'openai-proxy'
 
 export type ForgeArtifactType = 'eval_prompt'
 // Future: 'repair_pair' | 'rubric' | 'validator_signal'
@@ -16,23 +16,29 @@ export interface ForgeArtifact<T = EvalPromptPayload> {
   id: string
   type: ForgeArtifactType
   status: ForgeArtifactStatus
-  // class is always 'propolis' until local tribunal scores it — orthogonal to status
+  // tribunal_class is always 'propolis' until the local Swarm Tribunal scores it
   tribunal_class: 'propolis'
   domain: Domain | 'General'
   created_at: string
-  generated_by: string  // provider id used to generate
+  generated_by: string
   payload: T
 }
 
-// ─── OpenAI availability ──────────────────────────────────────────────────────
+// ─── Proxy health check ───────────────────────────────────────────────────────
 
-export function getOpenAIKey(): string | null {
-  const key = import.meta.env.VITE_OPENAI_API_KEY
-  return typeof key === 'string' && key.startsWith('sk-') ? key : null
+export interface ProxyHealth {
+  ok: boolean
+  note: string
 }
 
-export function isOpenAIAvailable(): boolean {
-  return getOpenAIKey() !== null
+export async function checkProxyHealth(): Promise<ProxyHealth> {
+  try {
+    const res = await fetch('/api/forge/health')
+    if (!res.ok) return { ok: false, note: `Proxy responded ${res.status}` }
+    return await res.json() as ProxyHealth
+  } catch {
+    return { ok: false, note: 'Forge proxy not running — start with: npm run server' }
+  }
 }
 
 export const OPENAI_MODELS = [
@@ -40,6 +46,31 @@ export const OPENAI_MODELS = [
   { id: 'gpt-4o', label: 'GPT-4o (quality)' },
   { id: 'o3-mini', label: 'o3-mini (reasoning)' },
 ] as const
+
+// ─── OpenAI generation via backend proxy ─────────────────────────────────────
+
+async function generateViaProxy(
+  type: ForgeArtifactType,
+  domain: string,
+  count: number,
+  intent: string,
+  modelType: 'base' | 'instruct',
+  model: string,
+): Promise<EvalPromptPayload[]> {
+  const res = await fetch('/api/forge', {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ type, domain, count, intent, modelType, model }),
+  })
+
+  if (!res.ok) {
+    const err = await res.json().catch(() => ({ error: `HTTP ${res.status}` }))
+    throw new Error(err.error ?? `Forge proxy error ${res.status}`)
+  }
+
+  const data = await res.json()
+  return data.artifacts as EvalPromptPayload[]
+}
 
 // ─── Local model forge generation (JSON prompt + extract) ────────────────────
 
@@ -77,77 +108,8 @@ async function extractJSONArray(raw: string): Promise<unknown[]> {
   const cleaned = raw.trim()
   const arrMatch = cleaned.match(/\[[\s\S]*\]/)
   if (arrMatch) return JSON.parse(arrMatch[0])
-  // fallback: try wrapping if model output a bare object
   return JSON.parse(cleaned)
 }
-
-// ─── OpenAI forge generation ─────────────────────────────────────────────────
-
-async function generateWithOpenAI(
-  type: ForgeArtifactType,
-  domain: string,
-  count: number,
-  intent: string,
-  modelType: 'base' | 'instruct',
-  model: string,
-): Promise<EvalPromptPayload[]> {
-  const key = getOpenAIKey()
-  if (!key) throw new Error('No OpenAI API key (VITE_OPENAI_API_KEY not set in .env.local)')
-
-  const modeNote =
-    modelType === 'base'
-      ? 'BASE mode — prompts must be partial professional documents that the model completes as text continuation. NOT questions or instructions.'
-      : 'INSTRUCT mode — prompts are direct questions or instructions to the model.'
-
-  const schema = EVAL_PROMPT_SCHEMA
-
-  const systemPrompt = `You are an expert in generating high-quality LLM evaluation prompts for the ${domain} domain.
-You write prompts that precisely test domain-specific knowledge, numerical reasoning, and professional vocabulary.
-${modeNote}`
-
-  const userPrompt = `Generate exactly ${count} ${domain} evaluation prompt(s).
-Intent: ${intent}
-
-Requirements:
-- Each user_prompt must read like a fragment of a real ${domain} professional document
-- system_prompt must be empty string "" for base model evals
-- expected_signal must name specific numbers, terms, or reasoning steps a domain expert would produce
-- failure_modes must describe concrete ways a poor model would fail (wrong number, wrong term, surface-level answer)
-- tags must be specific taxonomy terms (e.g. "cap-rate", "DSCR", "NOI" — not generic like "real estate")`
-
-  const res = await fetch('https://api.openai.com/v1/chat/completions', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      Authorization: `Bearer ${key}`,
-    },
-    body: JSON.stringify({
-      model,
-      messages: [
-        { role: 'system', content: systemPrompt },
-        { role: 'user', content: userPrompt },
-      ],
-      response_format: {
-        type: 'json_schema',
-        json_schema: schema,
-      },
-      temperature: 0.8,
-    }),
-  })
-
-  if (!res.ok) {
-    const text = await res.text()
-    throw new Error(`OpenAI API error ${res.status}: ${text.slice(0, 300)}`)
-  }
-
-  const data = await res.json()
-  const content = data.choices?.[0]?.message?.content
-  if (!content) throw new Error('No content in OpenAI response')
-  const parsed = JSON.parse(content)
-  return parsed.artifacts as EvalPromptPayload[]
-}
-
-// ─── Local model forge generation ────────────────────────────────────────────
 
 async function generateWithLocalModel(
   endpoint: ModelEndpoint,
@@ -189,33 +151,27 @@ export interface ForgeOptions {
   count: number
   intent: string
   modelType: 'base' | 'instruct'
-  // Provider: either OpenAI or a local endpoint
-  useOpenAI: boolean
+  useProxy: boolean
   openAIModel?: string
   localEndpoint?: ModelEndpoint
 }
 
 export async function forgeArtifacts(opts: ForgeOptions): Promise<ForgeArtifact[]> {
-  const { type, domain, count, intent, modelType, useOpenAI, openAIModel, localEndpoint } = opts
+  const { type, domain, count, intent, modelType, useProxy, openAIModel, localEndpoint } = opts
 
   let payloads: EvalPromptPayload[]
 
-  if (useOpenAI) {
-    payloads = await generateWithOpenAI(
-      type,
-      domain,
-      count,
-      intent,
-      modelType,
-      openAIModel ?? 'gpt-4o-mini',
-    )
+  if (useProxy) {
+    payloads = await generateViaProxy(type, domain, count, intent, modelType, openAIModel ?? 'gpt-4o-mini')
   } else {
     if (!localEndpoint) throw new Error('No local endpoint selected')
     payloads = await generateWithLocalModel(localEndpoint, type, domain, count, intent, modelType)
   }
 
   const now = new Date().toISOString()
-  const generatedBy = useOpenAI ? `openai:${openAIModel ?? 'gpt-4o-mini'}` : `local:${localEndpoint?.id}`
+  const generatedBy = useProxy
+    ? `openai:${openAIModel ?? 'gpt-4o-mini'} (via proxy)`
+    : `local:${localEndpoint?.id}`
 
   return payloads.map((payload, i) => ({
     id: `forge_${Date.now()}_${i}_${Math.random().toString(36).slice(2, 6)}`,

@@ -1,18 +1,17 @@
-import { useState, useRef } from 'react'
+import { useState, useRef, useEffect } from 'react'
 import {
   Flame, AlertTriangle, ChevronDown, Check, X,
-  Download, Upload, Sparkles, Loader2, Server, KeyRound,
+  Download, Upload, Sparkles, Loader2, Server, Wifi, WifiOff,
   ArrowUpRight, Info,
 } from 'lucide-react'
 import type { Domain } from '../../types'
-import type { ForgeArtifact, ForgeOptions } from '../../lib/providers'
+import type { ForgeArtifact, ForgeOptions, ProxyHealth } from '../../lib/providers'
 import {
-  isOpenAIAvailable, OPENAI_MODELS,
+  checkProxyHealth, OPENAI_MODELS,
   forgeArtifacts, loadForgeArtifacts, saveForgeArtifacts,
   updateForgeArtifact, exportForgeArtifacts,
 } from '../../lib/providers'
-import { loadEndpoints } from '../../lib/promptLibrary'
-import { savePrompt } from '../../lib/promptLibrary'
+import { loadEndpoints, savePrompt } from '../../lib/promptLibrary'
 import type { SavedPrompt } from '../../lib/promptLibrary'
 import type { EvalPromptPayload } from '../../lib/forgeSchemas'
 
@@ -37,11 +36,24 @@ interface Props {
 }
 
 export function PromptForgePage({ onPromoteToLibrary }: Props) {
-  const openAIAvailable = isOpenAIAvailable()
   const endpoints = loadEndpoints()
 
+  // Proxy health
+  const [proxyHealth, setProxyHealth] = useState<ProxyHealth | null>(null)
+  const [proxyChecking, setProxyChecking] = useState(true)
+
+  useEffect(() => {
+    setProxyChecking(true)
+    checkProxyHealth().then((h) => {
+      setProxyHealth(h)
+      setProxyChecking(false)
+      // Auto-select proxy if it's ready
+      if (h.ok) setUseProxy(true)
+    })
+  }, [])
+
   // Form state
-  const [useOpenAI, setUseOpenAI] = useState(openAIAvailable)
+  const [useProxy, setUseProxy] = useState(false)
   const [openAIModel, setOpenAIModel] = useState('gpt-4o-mini')
   const [localEndpointId, setLocalEndpointId] = useState(endpoints[0]?.id ?? '')
   const [domain, setDomain] = useState<Domain | 'General'>('CRE')
@@ -50,7 +62,6 @@ export function PromptForgePage({ onPromoteToLibrary }: Props) {
   const [intent, setIntent] = useState('')
   const [forging, setForging] = useState(false)
   const [error, setError] = useState<string | null>(null)
-  const [warnDismissed, setWarnDismissed] = useState(false)
 
   // Artifacts
   const [artifacts, setArtifacts] = useState<ForgeArtifact[]>(() => loadForgeArtifacts())
@@ -79,9 +90,9 @@ export function PromptForgePage({ onPromoteToLibrary }: Props) {
       count,
       intent: intent.trim(),
       modelType,
-      useOpenAI,
+      useProxy,
       openAIModel,
-      localEndpoint: useOpenAI ? undefined : localEndpoint,
+      localEndpoint: useProxy ? undefined : localEndpoint,
     }
 
     try {
@@ -98,9 +109,7 @@ export function PromptForgePage({ onPromoteToLibrary }: Props) {
 
   const handleStatus = (id: string, status: ForgeArtifact['status']) => {
     updateForgeArtifact(id, { status })
-    setArtifacts((prev) =>
-      prev.map((a) => (a.id === id ? { ...a, status } : a))
-    )
+    setArtifacts((prev) => prev.map((a) => (a.id === id ? { ...a, status } : a)))
   }
 
   const handlePromote = (artifact: ForgeArtifact<EvalPromptPayload>) => {
@@ -123,9 +132,7 @@ export function PromptForgePage({ onPromoteToLibrary }: Props) {
     exportForgeArtifacts(accepted)
   }
 
-  const handleExportAll = () => {
-    exportForgeArtifacts(artifacts)
-  }
+  const handleExportAll = () => exportForgeArtifacts(artifacts)
 
   const handleImport = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0]
@@ -144,20 +151,17 @@ export function PromptForgePage({ onPromoteToLibrary }: Props) {
     e.target.value = ''
   }
 
-  const handleClearRejected = () => {
-    const cleaned = artifacts.filter((a) => a.status !== 'rejected')
-    persist(cleaned)
-  }
+  const handleClearRejected = () => persist(artifacts.filter((a) => a.status !== 'rejected'))
 
-  const displayed = artifacts.filter((a) =>
-    filterStatus === 'all' ? true : a.status === filterStatus
-  )
+  const displayed = filterStatus === 'all' ? artifacts : artifacts.filter((a) => a.status === filterStatus)
 
   const counts = {
     candidate: artifacts.filter((a) => a.status === 'candidate').length,
     accepted:  artifacts.filter((a) => a.status === 'accepted').length,
     rejected:  artifacts.filter((a) => a.status === 'rejected').length,
   }
+
+  const proxyReady = proxyHealth?.ok === true
 
   return (
     <div className="flex flex-col gap-5 animate-fade-in">
@@ -169,7 +173,7 @@ export function PromptForgePage({ onPromoteToLibrary }: Props) {
             Prompt Forge
           </h2>
           <p className="text-xs text-[#555575] font-mono mt-0.5">
-            AI-assisted generation · all artifacts start as candidate · propolis until tribunal stamps
+            AI-assisted generation · candidate · propolis until tribunal stamps
           </p>
         </div>
         <div className="flex items-center gap-2">
@@ -203,38 +207,39 @@ export function PromptForgePage({ onPromoteToLibrary }: Props) {
         </div>
       </div>
 
-      {/* Dev-only warning banner */}
-      {openAIAvailable && !warnDismissed && (
-        <div className="flex items-start gap-3 px-4 py-3 rounded border border-[#7A5A10] bg-[#1A1208]">
-          <AlertTriangle size={15} className="text-[#E8B84B] mt-0.5 shrink-0" />
-          <div className="flex-1 text-xs font-mono text-[#A08040] leading-relaxed">
-            <span className="text-[#E8B84B] font-semibold">DEV-ONLY:</span> OpenAI API key is loaded
-            client-side via <code className="text-[#C8961F]">VITE_OPENAI_API_KEY</code> in{' '}
-            <code className="text-[#C8961F]">.env.local</code>. This key is visible in browser devtools.
-            Never deploy Granio to a public host with this configuration — use a backend proxy instead.
-            OpenAI assists generation only. Tribunal finality stays local.
-          </div>
-          <button
-            onClick={() => setWarnDismissed(true)}
-            className="text-[#555575] hover:text-[#E8B84B] transition-colors"
-          >
-            <X size={13} />
-          </button>
-        </div>
-      )}
-
-      {/* No API key notice */}
-      {!openAIAvailable && (
-        <div className="flex items-center gap-3 px-4 py-3 rounded border border-[#22222E] bg-[#0C0C14]">
-          <KeyRound size={14} className="text-[#555575] shrink-0" />
-          <p className="text-xs font-mono text-[#555575]">
-            OpenAI not configured. Add{' '}
-            <code className="text-[#7070A0]">VITE_OPENAI_API_KEY=sk-...</code> to{' '}
-            <code className="text-[#7070A0]">.env.local</code> to enable cloud generation.
-            Local model generation is available below.
-          </p>
-        </div>
-      )}
+      {/* Proxy status bar */}
+      <div className={`flex items-center gap-3 px-4 py-2.5 rounded border text-xs font-mono
+        ${proxyChecking ? 'border-[#22222E] text-[#555575]' : proxyReady
+          ? 'border-[#14532D] bg-[#060E08] text-[#4ADE80]'
+          : 'border-[#5C1A14] bg-[#0C0604] text-[#B83A2E]'
+        }`}
+      >
+        {proxyChecking ? (
+          <><Loader2 size={12} className="animate-spin" /> Checking forge proxy…</>
+        ) : proxyReady ? (
+          <><Wifi size={12} /> Forge proxy connected · OPENAI_API_KEY loaded server-side</>
+        ) : (
+          <>
+            <WifiOff size={12} />
+            Forge proxy offline — run{' '}
+            <code className="text-[#E8B84B] ml-1">npm run server</code>
+            <span className="text-[#555575] ml-2">· {proxyHealth?.note}</span>
+            <button
+              onClick={() => {
+                setProxyChecking(true)
+                checkProxyHealth().then((h) => {
+                  setProxyHealth(h)
+                  setProxyChecking(false)
+                  if (h.ok) setUseProxy(true)
+                })
+              }}
+              className="ml-auto text-[#555575] hover:text-[#A0A0C0] transition-colors"
+            >
+              retry
+            </button>
+          </>
+        )}
+      </div>
 
       <div className="grid grid-cols-5 gap-4">
         {/* ── Generation form ── */}
@@ -249,21 +254,21 @@ export function PromptForgePage({ onPromoteToLibrary }: Props) {
             <label className="text-xs font-mono text-[#555575] uppercase tracking-widest">Provider</label>
             <div className="flex gap-2">
               <button
-                onClick={() => setUseOpenAI(true)}
-                disabled={!openAIAvailable}
+                onClick={() => setUseProxy(true)}
+                disabled={!proxyReady}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded border text-xs font-mono transition-all
-                  ${useOpenAI && openAIAvailable
-                    ? 'text-[#E8B84B] border-[#7A5A10] bg-[#1A1208]'
-                    : 'text-[#555575] border-[#22222E] disabled:opacity-30 hover:border-[#32324A]'
+                  ${useProxy && proxyReady
+                    ? 'text-[#4ADE80] border-[#14532D] bg-[#060E08]'
+                    : 'text-[#555575] border-[#22222E] disabled:opacity-40 hover:border-[#32324A]'
                   }`}
               >
-                <KeyRound size={11} />
+                <Wifi size={11} />
                 OpenAI
               </button>
               <button
-                onClick={() => setUseOpenAI(false)}
+                onClick={() => setUseProxy(false)}
                 className={`flex-1 flex items-center justify-center gap-1.5 py-2 rounded border text-xs font-mono transition-all
-                  ${!useOpenAI
+                  ${!useProxy
                     ? 'text-[#60A5FA] border-[#1E3E6E] bg-[#070F1A]'
                     : 'text-[#555575] border-[#22222E] hover:border-[#32324A]'
                   }`}
@@ -273,7 +278,7 @@ export function PromptForgePage({ onPromoteToLibrary }: Props) {
               </button>
             </div>
 
-            {useOpenAI && openAIAvailable && (
+            {useProxy && (
               <select
                 value={openAIModel}
                 onChange={(e) => setOpenAIModel(e.target.value)}
@@ -285,7 +290,7 @@ export function PromptForgePage({ onPromoteToLibrary }: Props) {
               </select>
             )}
 
-            {!useOpenAI && (
+            {!useProxy && (
               <select
                 value={localEndpointId}
                 onChange={(e) => setLocalEndpointId(e.target.value)}
@@ -301,9 +306,9 @@ export function PromptForgePage({ onPromoteToLibrary }: Props) {
           {/* Artifact type */}
           <div className="space-y-2">
             <label className="text-xs font-mono text-[#555575] uppercase tracking-widest">Artifact Type</label>
-            <div className="w-full flex items-center justify-between px-3 py-2 rounded border border-[#22222E] bg-[#0E0E18]">
+            <div className="flex items-center justify-between px-3 py-2 rounded border border-[#22222E] bg-[#0E0E18]">
               <span className="text-xs font-mono text-[#A0A0C0]">Eval Prompts</span>
-              <span className="text-xs font-mono text-[#404060]">repair pairs · rubrics · signals → v2</span>
+              <span className="text-xs font-mono text-[#404060]">repair pairs · rubrics → v2</span>
             </div>
           </div>
 
@@ -375,7 +380,7 @@ export function PromptForgePage({ onPromoteToLibrary }: Props) {
           {/* Forge button */}
           <button
             onClick={handleForge}
-            disabled={forging || !intent.trim()}
+            disabled={forging || !intent.trim() || (useProxy && !proxyReady)}
             className="w-full flex items-center justify-center gap-2 py-2.5 rounded border
               border-[#7A5A10] bg-[#1A1208] text-[#E8B84B] text-sm font-mono font-medium
               hover:bg-[#221A0A] disabled:opacity-40 disabled:cursor-not-allowed transition-all"
@@ -415,13 +420,15 @@ export function PromptForgePage({ onPromoteToLibrary }: Props) {
             )}
           </div>
 
-          {/* Artifact cards */}
+          {/* Empty state */}
           {displayed.length === 0 && (
             <div className="flex flex-col items-center justify-center py-16 text-center">
               <Flame size={28} className="text-[#2A2A3E] mb-3" />
               <p className="text-sm font-mono text-[#404060]">No artifacts yet</p>
               <p className="text-xs font-mono text-[#2A2A3E] mt-1">
-                Set intent and hit Forge to generate eval prompts
+                {proxyReady
+                  ? 'Set intent and hit Forge to generate eval prompts via OpenAI'
+                  : 'Start the forge proxy (npm run server) or use a local model'}
               </p>
             </div>
           )}
@@ -562,11 +569,10 @@ export function PromptForgePage({ onPromoteToLibrary }: Props) {
       <div className="flex items-start gap-2 px-4 py-3 rounded border border-[#1C1C26] bg-[#0A0A10]">
         <Info size={12} className="text-[#404060] mt-0.5 shrink-0" />
         <p className="text-xs font-mono text-[#404060] leading-relaxed">
-          OpenAI (or local model) generates candidate artifacts. Accepting moves status to{' '}
-          <span className="text-[#4ADE80]">accepted</span> but class remains{' '}
-          <span className="text-[#B83A2E]">propolis</span> — quality class only changes
-          when the local Swarm Tribunal weighs the pair. Promote accepted prompts to the library
-          to run them through the Runner against your models.
+          OpenAI key stays server-side — never reaches the browser. Accepting an artifact moves
+          status to <span className="text-[#4ADE80]">accepted</span> but class remains{' '}
+          <span className="text-[#B83A2E]">propolis</span> until the local Swarm Tribunal weighs
+          the pair. Promote accepted prompts to the library to run them in the Runner.
         </p>
       </div>
     </div>
