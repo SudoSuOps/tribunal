@@ -29,20 +29,28 @@ const ENDPOINTS_KEY = 'granio_model_endpoints'
 
 export const DEFAULT_ENDPOINTS: ModelEndpoint[] = [
   {
-    id: 'qwen36-27b-base',
-    label: 'Qwen 3.6 27B Base',
-    base_url: 'http://localhost:11434',
+    id: 'granite41-30b-base',
+    label: 'Granite 4.1 30B Base',
+    base_url: 'http://192.168.0.100:11434',
     api_type: 'ollama',
-    model_name: 'qwen2.5:32b',
+    model_name: 'hf.co/bartowski/ibm-granite_granite-4.1-30b-GGUF:Q8_0',
     color: 'base',
   },
   {
-    id: 'atlas27b-cook-v1',
-    label: 'Atlas 27B Cook v1',
-    base_url: 'http://localhost:8082',
-    api_type: 'openai',
-    model_name: 'swarmcurator-27b',
+    id: 'granite41-30b-instruct',
+    label: 'Granite 4.1 30B Instruct',
+    base_url: 'http://192.168.0.100:11434',
+    api_type: 'ollama',
+    model_name: 'hf.co/ibm-granite/granite-4.1-30b-GGUF:Q8_0',
     color: 'cooked',
+  },
+  {
+    id: 'masterwriter-31b',
+    label: 'MasterWriter 31B',
+    base_url: 'http://192.168.0.100:11434',
+    api_type: 'ollama',
+    model_name: 'masterwriter:31b',
+    color: 'honey',
   },
   {
     id: 'swarmcurator-9b',
@@ -50,14 +58,6 @@ export const DEFAULT_ENDPOINTS: ModelEndpoint[] = [
     base_url: 'http://192.168.0.99:8081',
     api_type: 'openai',
     model_name: 'swarmcurator-9b',
-    color: 'honey',
-  },
-  {
-    id: 'masterwriter-31b',
-    label: 'MasterWriter 31B',
-    base_url: 'http://localhost:11434',
-    api_type: 'ollama',
-    model_name: 'masterwriter:31b',
     color: 'neutral',
   },
 ]
@@ -155,6 +155,10 @@ export interface RunOptions {
   user_prompt: string
   temperature?: number
   max_tokens?: number
+  top_p?: number
+  top_k?: number
+  repeat_penalty?: number
+  num_ctx?: number
   onToken: (token: string) => void
   onDone: (full: string) => void
   onError: (err: string) => void
@@ -162,7 +166,12 @@ export interface RunOptions {
 }
 
 export async function streamCompletion(opts: RunOptions): Promise<void> {
-  const { endpoint, system_prompt, user_prompt, temperature = 0.3, max_tokens = 2048, onToken, onDone, onError, signal } = opts
+  const {
+    endpoint, system_prompt, user_prompt,
+    temperature = 0.3, max_tokens = 2048,
+    top_p, top_k, repeat_penalty, num_ctx,
+    onToken, onDone, onError, signal,
+  } = opts
 
   const messages = [
     ...(system_prompt.trim() ? [{ role: 'system', content: system_prompt }] : []),
@@ -174,21 +183,26 @@ export async function streamCompletion(opts: RunOptions): Promise<void> {
 
   if (endpoint.api_type === 'ollama') {
     url = `${endpoint.base_url}/api/chat`
-    body = {
-      model: endpoint.model_name,
-      messages,
-      stream: true,
-      options: { temperature, num_predict: max_tokens },
+    const ollamaOpts: Record<string, unknown> = {
+      temperature,
+      num_predict: max_tokens,
     }
+    if (top_p !== undefined)        ollamaOpts.top_p = top_p
+    if (top_k !== undefined)        ollamaOpts.top_k = top_k
+    if (repeat_penalty !== undefined) ollamaOpts.repeat_penalty = repeat_penalty
+    if (num_ctx !== undefined)      ollamaOpts.num_ctx = num_ctx
+    body = { model: endpoint.model_name, messages, stream: true, options: ollamaOpts }
   } else {
     url = `${endpoint.base_url}/v1/chat/completions`
-    body = {
+    const oaiBody: Record<string, unknown> = {
       model: endpoint.model_name,
       messages,
       stream: true,
       temperature,
       max_tokens,
     }
+    if (top_p !== undefined) oaiBody.top_p = top_p
+    body = oaiBody
   }
 
   let full = ''

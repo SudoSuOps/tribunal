@@ -40,8 +40,12 @@ export function PromptRunnerPage({ onGoToLibrary, libraryPrompts, preloadPrompt,
   const [compareMode, setCompareMode] = useState(false)
   const [systemPrompt, setSystemPrompt] = useState('')
   const [userPrompt, setUserPrompt] = useState('')
-  const [temperature, setTemperature] = useState(0.3)
-  const [maxTokens, setMaxTokens] = useState(1024)
+  const [temperature, setTemperature] = useState(0.15)
+  const [maxTokens, setMaxTokens] = useState(2200)
+  const [topP, setTopP] = useState(0.88)
+  const [topK, setTopK] = useState(35)
+  const [repeatPenalty, setRepeatPenalty] = useState(1.08)
+  const [numCtx, setNumCtx] = useState(16384)
   const [showSettings, setShowSettings] = useState(false)
   const [showLibraryPicker, setShowLibraryPicker] = useState(false)
   const [showAddEndpoint, setShowAddEndpoint] = useState(false)
@@ -55,6 +59,8 @@ export function PromptRunnerPage({ onGoToLibrary, libraryPrompts, preloadPrompt,
 
   const endpointA = endpoints.find((e) => e.id === selectedA)
   const endpointB = endpoints.find((e) => e.id === selectedB)
+
+  const inferenceParams = { temperature, max_tokens: maxTokens, top_p: topP, top_k: topK, repeat_penalty: repeatPenalty, num_ctx: numCtx }
 
   const handleRun = useCallback(async () => {
     if (!userPrompt.trim()) return
@@ -83,8 +89,7 @@ export function PromptRunnerPage({ onGoToLibrary, libraryPrompts, preloadPrompt,
       endpoint: endpointA,
       system_prompt: systemPrompt,
       user_prompt: userPrompt,
-      temperature,
-      max_tokens: maxTokens,
+      ...inferenceParams,
       signal: abortRef.current.signal,
       onToken: (token) => {
         setResultA((prev) => prev ? { ...prev, output: prev.output + token } : null)
@@ -106,8 +111,7 @@ export function PromptRunnerPage({ onGoToLibrary, libraryPrompts, preloadPrompt,
         endpoint: endpointB,
         system_prompt: systemPrompt,
         user_prompt: userPrompt,
-        temperature,
-        max_tokens: maxTokens,
+        ...inferenceParams,
         signal: abortRef.current.signal,
         onToken: (token) => {
           setResultB((prev) => prev ? { ...prev, output: prev.output + token } : null)
@@ -124,7 +128,7 @@ export function PromptRunnerPage({ onGoToLibrary, libraryPrompts, preloadPrompt,
         },
       })
     }
-  }, [userPrompt, systemPrompt, endpointA, endpointB, compareMode, temperature, maxTokens])
+  }, [userPrompt, systemPrompt, endpointA, endpointB, compareMode, inferenceParams])
 
   const handleStop = () => {
     abortRef.current?.abort()
@@ -234,26 +238,49 @@ export function PromptRunnerPage({ onGoToLibrary, libraryPrompts, preloadPrompt,
 
       {/* Settings panel */}
       {showSettings && (
-        <div className="card-surface p-4 flex items-center gap-6 animate-slide-up shrink-0">
-          <label className="flex items-center gap-2 text-xs font-mono text-[#7878A0]">
-            Temperature
-            <input
-              type="range" min={0} max={1} step={0.05}
-              value={temperature}
-              onChange={(e) => setTemperature(parseFloat(e.target.value))}
-              className="w-24 accent-[#C8961F]"
-            />
-            <span className="text-[#E8B84B] w-8">{temperature}</span>
-          </label>
-          <label className="flex items-center gap-2 text-xs font-mono text-[#7878A0]">
-            Max tokens
-            <input
-              type="number" min={64} max={8192} step={64}
-              value={maxTokens}
-              onChange={(e) => setMaxTokens(parseInt(e.target.value))}
-              className="w-20 bg-[#0F0F15] border border-[#22222E] rounded px-2 py-1 text-[#C0C0D8] text-xs font-mono"
-            />
-          </label>
+        <div className="card-surface p-4 animate-slide-up shrink-0">
+          <div className="flex flex-wrap items-center gap-x-6 gap-y-3">
+            <label className="flex items-center gap-2 text-xs font-mono text-[#7878A0]">
+              temp
+              <input type="range" min={0} max={1} step={0.01} value={temperature}
+                onChange={(e) => setTemperature(parseFloat(e.target.value))}
+                className="w-20 accent-[#C8961F]" />
+              <span className="text-[#E8B84B] w-8">{temperature}</span>
+            </label>
+            <label className="flex items-center gap-2 text-xs font-mono text-[#7878A0]">
+              top_p
+              <input type="range" min={0.5} max={1} step={0.01} value={topP}
+                onChange={(e) => setTopP(parseFloat(e.target.value))}
+                className="w-20 accent-[#C8961F]" />
+              <span className="text-[#E8B84B] w-8">{topP}</span>
+            </label>
+            <label className="flex items-center gap-2 text-xs font-mono text-[#7878A0]">
+              top_k
+              <input type="range" min={1} max={100} step={1} value={topK}
+                onChange={(e) => setTopK(parseInt(e.target.value))}
+                className="w-20 accent-[#C8961F]" />
+              <span className="text-[#E8B84B] w-8">{topK}</span>
+            </label>
+            <label className="flex items-center gap-2 text-xs font-mono text-[#7878A0]">
+              repeat_penalty
+              <input type="range" min={1.0} max={1.5} step={0.01} value={repeatPenalty}
+                onChange={(e) => setRepeatPenalty(parseFloat(e.target.value))}
+                className="w-20 accent-[#C8961F]" />
+              <span className="text-[#E8B84B] w-10">{repeatPenalty}</span>
+            </label>
+            <label className="flex items-center gap-2 text-xs font-mono text-[#7878A0]">
+              max_tokens
+              <input type="number" min={64} max={8192} step={64} value={maxTokens}
+                onChange={(e) => setMaxTokens(parseInt(e.target.value))}
+                className="w-20 bg-[#0F0F15] border border-[#22222E] rounded px-2 py-1 text-[#C0C0D8] text-xs font-mono" />
+            </label>
+            <label className="flex items-center gap-2 text-xs font-mono text-[#7878A0]">
+              ctx
+              <input type="number" min={2048} max={131072} step={2048} value={numCtx}
+                onChange={(e) => setNumCtx(parseInt(e.target.value))}
+                className="w-24 bg-[#0F0F15] border border-[#22222E] rounded px-2 py-1 text-[#C0C0D8] text-xs font-mono" />
+            </label>
+          </div>
         </div>
       )}
 
