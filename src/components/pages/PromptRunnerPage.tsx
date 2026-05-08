@@ -138,10 +138,23 @@ export function PromptRunnerPage({ onGoToLibrary, libraryPrompts, preloadPrompt,
   const handleCopy = (which: 'a' | 'b') => {
     const text = which === 'a' ? resultA?.output : resultB?.output
     if (!text) return
-    navigator.clipboard.writeText(text).then(() => {
-      setCopied(which)
-      setTimeout(() => setCopied(null), 1500)
-    })
+    const confirm = () => { setCopied(which); setTimeout(() => setCopied(null), 1500) }
+    // navigator.clipboard requires HTTPS or localhost — use execCommand fallback on LAN HTTP
+    if (navigator.clipboard && window.isSecureContext) {
+      navigator.clipboard.writeText(text).then(confirm).catch(() => execCopy(text, confirm))
+    } else {
+      execCopy(text, confirm)
+    }
+  }
+
+  const execCopy = (text: string, onSuccess: () => void) => {
+    const ta = document.createElement('textarea')
+    ta.value = text
+    ta.style.cssText = 'position:fixed;opacity:0;pointer-events:none'
+    document.body.appendChild(ta)
+    ta.focus(); ta.select()
+    try { document.execCommand('copy'); onSuccess() } catch { /* silent */ }
+    document.body.removeChild(ta)
   }
 
   const handleSavePrompt = () => {
@@ -322,7 +335,16 @@ export function PromptRunnerPage({ onGoToLibrary, libraryPrompts, preloadPrompt,
       <div className="shrink-0">
         <div className="flex items-center justify-between mb-1.5">
           <div className="text-xs font-mono text-[#404060] uppercase tracking-widest">User Prompt</div>
-          <div className="flex items-center gap-2">
+          <div className="flex items-center gap-3">
+            {userPrompt && (
+              <button
+                onClick={() => { setUserPrompt(''); setResultA(null); setResultB(null) }}
+                className="flex items-center gap-1 text-xs font-mono text-[#555575] hover:text-[#B83A2E] transition-colors"
+              >
+                <ArrowRight size={10} className="rotate-180" />
+                Clear
+              </button>
+            )}
             <button
               onClick={() => setShowLibraryPicker((v) => !v)}
               className="flex items-center gap-1.5 text-xs font-mono text-[#7878A0] hover:text-[#E8B84B] transition-colors"
