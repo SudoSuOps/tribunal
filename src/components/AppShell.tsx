@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import {
   LayoutDashboard, ListChecks, Microscope, GitCompare, Bug,
-  Wrench, ShieldCheck, Gavel, BookOpen, ChevronRight, Play, Library,
+  Wrench, ShieldCheck, Gavel, BookOpen, ChevronRight, Play, Library, Flame,
 } from 'lucide-react'
 import { DoctrineChip } from './DoctrineChip'
 
@@ -17,6 +17,7 @@ type Page =
   | 'doctrine'
   | 'prompt-runner'
   | 'prompt-library'
+  | 'prompt-forge'
 
 interface NavItem {
   page: Page
@@ -37,6 +38,7 @@ const NAV_ITEMS: NavItem[] = [
   { page: 'doctrine', label: 'Doctrine', icon: BookOpen },
   { page: 'prompt-runner', label: 'Prompt Runner', icon: Play },
   { page: 'prompt-library', label: 'Prompt Library', icon: Library },
+  { page: 'prompt-forge', label: 'Prompt Forge', icon: Flame },
 ]
 
 const DOCTRINE_CHIPS = [

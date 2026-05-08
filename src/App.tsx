@@ -11,6 +11,7 @@ import { TribunalVerdictsPage } from './components/pages/TribunalVerdictsPage'
 import { DoctrinePage } from './components/pages/DoctrinePage'
 import { PromptRunnerPage } from './components/pages/PromptRunnerPage'
 import { PromptLibraryPage } from './components/pages/PromptLibraryPage'
+import { PromptForgePage } from './components/pages/PromptForgePage'
 import { loadPrompts, type SavedPrompt } from './lib/promptLibrary'
 import {
   SEED_EVAL_RUN,
@@ -104,6 +105,14 @@ export default function App() {
       {activePage === 'prompt-library' && (
         <PromptLibraryPage
           onRunPrompt={handleLoadIntoRunner}
+        />
+      )}
+      {activePage === 'prompt-forge' && (
+        <PromptForgePage
+          onPromoteToLibrary={(saved) => {
+            handleLibraryChange()
+            // Navigate to library so user sees the promoted prompt
+          }}
         />
       )}
     </AppShell>
