@@ -568,6 +568,7 @@ function OutputPanel({ result, side, onCopy, copied }: {
   onCopy: () => void
   copied: boolean
 }) {
+  const [verdict, setVerdict] = useState<string | null>(null)
   const colorClass = side === 'a' ? 'text-[#60A5FA]' : 'text-[#A78BFA]'
   const borderClass = side === 'a' ? 'border-[#1E3E6E]' : 'border-[#3E2878]'
 
@@ -628,10 +629,25 @@ function OutputPanel({ result, side, onCopy, copied }: {
         <div className="shrink-0 border-t border-[#1C1C26] px-4 py-2.5 flex items-center gap-2">
           <span className="text-xs font-mono text-[#404060]">Classify:</span>
           {(['honey', 'jelly', 'propolis'] as const).map((c) => (
-            <button key={c}>
+            <button
+              key={c}
+              onClick={() => setVerdict(verdict === c ? null : c)}
+              className={`rounded transition-all ${
+                verdict === c
+                  ? 'ring-2 ring-offset-1 ring-offset-[#13131A] ring-[#C8961F] scale-105'
+                  : verdict !== null
+                    ? 'opacity-30 hover:opacity-70'
+                    : 'hover:scale-105'
+              }`}
+            >
               <StatusBadge type="classification" value={c} />
             </button>
           ))}
+          {verdict && (
+            <span className="ml-1 text-xs font-mono text-[#555575]">
+              — {verdict} filed
+            </span>
+          )}
         </div>
       )}
     </div>
