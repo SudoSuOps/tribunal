@@ -1,4 +1,4 @@
-import { useState } from 'react'
+import { useState, useCallback } from 'react'
 import { AppShell, type Page } from './components/AppShell'
 import { DashboardOverview } from './components/pages/DashboardOverview'
 import { EvalRunsPage } from './components/pages/EvalRunsPage'
@@ -9,6 +9,9 @@ import { PairFactoryPage } from './components/pages/PairFactoryPage'
 import { CuratorQCPage } from './components/pages/CuratorQCPage'
 import { TribunalVerdictsPage } from './components/pages/TribunalVerdictsPage'
 import { DoctrinePage } from './components/pages/DoctrinePage'
+import { PromptRunnerPage } from './components/pages/PromptRunnerPage'
+import { PromptLibraryPage } from './components/pages/PromptLibraryPage'
+import { loadPrompts, type SavedPrompt } from './lib/promptLibrary'
 import {
   SEED_EVAL_RUN,
   SEED_COMPARISON,
@@ -25,6 +28,8 @@ const ALL_VERDICTS = [SEED_VERDICT]
 export default function App() {
   const [activePage, setActivePage] = useState<Page>('dashboard')
   const [selectedRunId, setSelectedRunId] = useState<string | null>(SEED_EVAL_RUN.run_id)
+  const [libraryPrompts, setLibraryPrompts] = useState<SavedPrompt[]>(() => loadPrompts())
+  const [runnerPreload, setRunnerPreload] = useState<SavedPrompt | null>(null)
 
   const selectedRun = ALL_RUNS.find((r) => r.run_id === selectedRunId) ?? null
 
@@ -33,6 +38,15 @@ export default function App() {
   const handleSelectRun = (runId: string) => {
     setSelectedRunId(runId)
   }
+
+  const handleLibraryChange = useCallback(() => {
+    setLibraryPrompts(loadPrompts())
+  }, [])
+
+  const handleLoadIntoRunner = useCallback((prompt: SavedPrompt) => {
+    setRunnerPreload(prompt)
+    setActivePage('prompt-runner')
+  }, [])
 
   return (
     <AppShell activePage={activePage} onNavigate={setActivePage}>
@@ -77,6 +91,20 @@ export default function App() {
       )}
       {activePage === 'doctrine' && (
         <DoctrinePage />
+      )}
+      {activePage === 'prompt-runner' && (
+        <PromptRunnerPage
+          onGoToLibrary={() => setActivePage('prompt-library')}
+          libraryPrompts={libraryPrompts}
+          onLibraryLoad={handleLoadIntoRunner}
+          preloadPrompt={runnerPreload}
+          onPreloadConsumed={() => setRunnerPreload(null)}
+        />
+      )}
+      {activePage === 'prompt-library' && (
+        <PromptLibraryPage
+          onRunPrompt={handleLoadIntoRunner}
+        />
       )}
     </AppShell>
   )

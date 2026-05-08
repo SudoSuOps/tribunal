@@ -1,7 +1,7 @@
 import type { ReactNode } from 'react'
 import {
   LayoutDashboard, ListChecks, Microscope, GitCompare, Bug,
-  Wrench, ShieldCheck, Gavel, BookOpen, ChevronRight,
+  Wrench, ShieldCheck, Gavel, BookOpen, ChevronRight, Play, Library,
 } from 'lucide-react'
 import { DoctrineChip } from './DoctrineChip'
 
@@ -15,6 +15,8 @@ type Page =
   | 'curator-qc'
   | 'tribunal-verdicts'
   | 'doctrine'
+  | 'prompt-runner'
+  | 'prompt-library'
 
 interface NavItem {
   page: Page
@@ -33,6 +35,8 @@ const NAV_ITEMS: NavItem[] = [
   { page: 'curator-qc', label: 'Curator QC', icon: ShieldCheck },
   { page: 'tribunal-verdicts', label: 'Verdicts', icon: Gavel, badge: '1' },
   { page: 'doctrine', label: 'Doctrine', icon: BookOpen },
+  { page: 'prompt-runner', label: 'Prompt Runner', icon: Play },
+  { page: 'prompt-library', label: 'Prompt Library', icon: Library },
 ]
 
 const DOCTRINE_CHIPS = [
@@ -112,7 +116,29 @@ export function AppShell({ activePage, onNavigate, children }: Props) {
           })}
 
           <div className="nav-section-label mt-2">Court</div>
-          {NAV_ITEMS.slice(7).map((item) => {
+          {NAV_ITEMS.slice(7, 9).map((item) => {
+            const Icon = item.icon
+            const active = activePage === item.page
+            return (
+              <button
+                key={item.page}
+                onClick={() => onNavigate(item.page)}
+                className={`nav-item w-full ${active ? 'active' : ''}`}
+              >
+                <Icon size={14} className="shrink-0" />
+                <span className="flex-1 text-left">{item.label}</span>
+                {item.badge && !active && (
+                  <span className="text-xs font-mono bg-[#1C1C26] text-[#555575] px-1.5 py-0.5 rounded">
+                    {item.badge}
+                  </span>
+                )}
+                {active && <ChevronRight size={12} className="shrink-0" />}
+              </button>
+            )
+          })}
+
+          <div className="nav-section-label mt-2">Prompts</div>
+          {NAV_ITEMS.slice(9).map((item) => {
             const Icon = item.icon
             const active = activePage === item.page
             return (
