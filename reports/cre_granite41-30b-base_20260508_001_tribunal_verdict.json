@@ -1,0 +1,140 @@
+{
+  "run_id": "cre_granite41-30b-base_20260508_001",
+  "timestamp": "2026-05-08T00:00:00Z",
+  "model_a": {
+    "id": "hf.co/ibm-granite/granite-4.1-30b-GGUF:Q8_0",
+    "label": "Granite 4.1 30B Q8_0",
+    "endpoint": "http://192.168.0.100:11434"
+  },
+  "model_b": null,
+  "prompt_pack": {
+    "name": "CRE Institutional Underwriting Bracket",
+    "domain": "CRE Institutional Underwriting",
+    "n_prompts": 8
+  },
+  "rubric": {
+    "dimensions": ["accuracy", "completeness", "specificity", "structure", "domain_expertise"]
+  },
+  "scores": {
+    "per_prompt": [
+      {"prompt_id": "P1_memphis_312",    "classification": "propolis", "math_pass": "3/9",  "verdict_correct": true,  "notes": "Critical arithmetic failures. Verdict (Kill) correct."},
+      {"prompt_id": "P2_denver_dscr",    "classification": "jelly",    "math_pass": "4/4",  "verdict_correct": true,  "notes": "DSCR correct, Reprice correct. Minor ADS rounding delta."},
+      {"prompt_id": "P3_nashville_nnn",  "classification": "jelly",    "math_pass": "4/5",  "verdict_correct": true,  "notes": "Missing cap rate differential — anchor institutional insight."},
+      {"prompt_id": "P4_dallas_proforma","classification": "jelly",    "math_pass": "2/5",  "verdict_correct": true,  "notes": "Exit value correct. Gross return wrong (38.5% vs 48.2%). Fabricated broker survey."},
+      {"prompt_id": "P5_chicago_office", "classification": "jelly",    "math_pass": "4/5",  "verdict_correct": null,  "notes": "Math correct. Kill verdict debatable on 2.31x value-add play."},
+      {"prompt_id": "P6_miami_debt",     "classification": "jelly",    "math_pass": "3/5",  "verdict_correct": false, "notes": "Kill verdict incorrect — DSCR failure is Reprice/restructure, not Kill."},
+      {"prompt_id": "P7_1031_exchange",  "classification": "honey",    "math_pass": "6/6",  "verdict_correct": true,  "notes": "All dates, all rules correct. Strongest output of the bracket."},
+      {"prompt_id": "P8_cap_rate_spread","classification": "honey",    "math_pass": "4/4",  "verdict_correct": true,  "notes": "Spread calc correct. Historical context accurate. Investor implications strong."}
+    ],
+    "aggregate": {
+      "accuracy": 0.58,
+      "completeness": 0.72,
+      "specificity": 0.74,
+      "structure": 0.82,
+      "domain_expertise": 0.76,
+      "final_weight": 0.72
+    },
+    "output_distribution": {
+      "honey": 2,
+      "jelly": 5,
+      "propolis": 1,
+      "total": 8
+    },
+    "strongest_prompt": "P7 — 1031 Exchange (6/6 checks, all dates and rules correct)",
+    "weakest_prompt": "P1 — Memphis 312 (3/9 checks, critical arithmetic failures)"
+  },
+  "failures": [
+    {
+      "failure_id": "fail_001",
+      "layer_a": "fabricated_result",
+      "layer_b": "renovation_budget_error",
+      "severity": "critical",
+      "prompt_id": "P1_memphis_312",
+      "quote": "Renovation Budget: $17,775,000 (180 units x $9,750/unit)",
+      "correct_behavior": "180 × $9,750 = $1,755,000. The model produced a 10x decimal error that cascades to total project cost, loan sizing, and annual interest. All downstream math is wrong."
+    },
+    {
+      "failure_id": "fail_002",
+      "layer_a": "skipped_verification",
+      "layer_b": "interest_coverage_error",
+      "severity": "critical",
+      "prompt_id": "P1_memphis_312",
+      "quote": "Loan Amount: $21,840,000 (70% of $31,200,000)",
+      "correct_behavior": "LTC = loan-to-cost. The denominator is total project cost ($35,526,500), not purchase price ($31,200,000). Correct loan: $24,868,550. Correct annual interest: $2,200,867. Correct ICR: 0.85x. Model never stated the 0.85x ratio explicitly — the load-bearing failure metric for this deal."
+    },
+    {
+      "failure_id": "fail_003",
+      "layer_a": "fabricated_result",
+      "layer_b": "hallucinated_market_fact",
+      "severity": "high",
+      "prompt_id": "P4_dallas_proforma",
+      "quote": "aligns with current Dallas Class A industrial cap rates reported in recent broker surveys (5.6–6.0%)",
+      "correct_behavior": "No market cap rate data was provided in the prompt. Model must not invent broker survey data. If market confirmation is needed, state it as missing diligence."
+    },
+    {
+      "failure_id": "fail_004",
+      "layer_a": "fabricated_result",
+      "layer_b": "pro_forma_math_error",
+      "severity": "high",
+      "prompt_id": "P4_dallas_proforma",
+      "quote": "Implied gross return before any financing is roughly 7.7% per annum (38.5% / 5)",
+      "correct_behavior": "Total NOI (5yr) = $2,991,697. Exit value = $11,531,345. Gross profit = $4,723,042. Gross return = 48.2% over 5 years (9.6%/yr annualized simple). Model computed ~38.5% — source of error unclear, likely intermediate arithmetic mistake."
+    },
+    {
+      "failure_id": "fail_005",
+      "layer_a": "incomplete_task",
+      "layer_b": "verdict_misalignment",
+      "severity": "medium",
+      "prompt_id": "P3_nashville_nnn",
+      "quote": null,
+      "correct_behavior": "Cap rate differential between NNN and gross lease is the primary institutional investment rationale beyond the $1/SF arithmetic spread. NNN credit-tenant assets trade at 50–150bps lower cap rates — on a $1M NOI that is $1–3M in valuation premium. A senior analyst leads with this. Model treated the comparison as an OPEX risk analysis, not a valuation premium analysis."
+    },
+    {
+      "failure_id": "fail_006",
+      "layer_a": "unsafe_claim",
+      "layer_b": "verdict_misalignment",
+      "severity": "medium",
+      "prompt_id": "P6_miami_debt",
+      "quote": "Recommendation: Kill – reject the financing proposal",
+      "correct_behavior": "DSCR below lender minimum is a Reprice/restructure signal, not a Kill. The model correctly identified remediation paths (reduce loan, improve NOI, add collateral) but then issued Kill. Standard lender response: reduce loan to achieve 1.25x DSCR, which is ~$27.5M vs $32M requested. Kill is reserved for irremediable deals."
+    }
+  ],
+  "failure_counts": {
+    "critical": 2,
+    "high": 2,
+    "medium": 2,
+    "total": 6
+  },
+  "verdict": "Needs More Data",
+  "final_decision": "Do Not Promote — Research Ready Only",
+  "classification": "propolis",
+  "classification_note": "Base-only eval. Two critical failures block any Honey classification. Honey requires: (1) no critical failures, (2) measured delta improvement vs. trained checkpoint. Neither condition is met.",
+  "readiness": "Research Ready",
+  "readiness_rationale": "Domain awareness is evident across all 8 prompts — correct distress identification (P1 Kill is directionally right), sound qualitative risk framing (P2, P3, P5), precise 1031 recall (P7), and accurate market commentary (P8). Two critical arithmetic failures on multi-variable cost buildup problems (P1) and holding-period return calculation (P4) make numerical outputs unreliable without full independent verification.",
+  "eval_stats": {
+    "total_tokens": 12496,
+    "total_duration_seconds": 425,
+    "avg_tokens_per_prompt": 1562,
+    "avg_duration_per_prompt_seconds": 53
+  },
+  "artifacts": {
+    "verdict_md": "reports/cre_granite41-30b-base_20260508_001_tribunal_verdict.md",
+    "verdict_json": "reports/cre_granite41-30b-base_20260508_001_tribunal_verdict.json",
+    "taxonomy_json": "reports/cre_granite41-30b-base_20260508_001_failure_taxonomy.json",
+    "repair_plan": "reports/cre_granite41-30b-base_20260508_001_repair_pair_plan.json",
+    "raw_outputs_dir": "runs/cre_granite41-30b-base_20260508_001/raw_outputs/"
+  },
+  "artifacts_status": {
+    "verdict_md": "filed",
+    "verdict_json": "filed",
+    "taxonomy_json": "pending",
+    "repair_plan": "pending",
+    "raw_outputs": "filed (8/8)"
+  },
+  "next_steps": [
+    "File _failure_taxonomy.json with full Layer A + Layer B labels for all 6 failures.",
+    "File _repair_pair_plan.json with three repair blocks: (1) arithmetic buildup pairs, (2) market fabrication discipline pairs, (3) verdict calibration pairs.",
+    "Use P7 and P8 as positive exemplar anchors in repair pair system prompts.",
+    "Re-run the full 8-prompt bracket against fine-tuned checkpoint to measure delta before any promotion consideration."
+  ]
+}

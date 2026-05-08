@@ -1,0 +1,12 @@
+{
+  "run_id": "cre_granite41-30b-base_20260508_001",
+  "date": "2026-05-08",
+  "domain": "CRE Institutional Underwriting",
+  "model": "Granite 4.1 30B Base",
+  "runtime": "ollama",
+  "quantization": "Q8_0",
+  "eval_pack": "CRE Tribunal Granite 30B Prompt Pack",
+  "status": "initialized",
+  "doctrine": "Tribunal begins before training. No proof, no honey.",
+  "model_ollama_tag": "hf.co/ibm-granite/granite-4.1-30b-GGUF:Q8_0"
+}
